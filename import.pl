@@ -156,7 +156,17 @@ ARTICLE: foreach my $nyhet (@nyhet)
         }
 
         # Locate text post body HTML; ignore the header end </center>
-        $foundheaderend = 1, next LINE if $line =~ /<\/center>/;
+        # but possible parse an image if we find it
+        if (!$foundheaderend && $line =~ /<\/center>/)
+        {
+            $foundheaderend = 1;
+            if ($image eq '' && $body eq '' && $line =~ /<center>(<img src[^>]+>)<\/center>/)
+            {
+                $body = $1;
+                $body .= "<br>\n";
+            }
+            next LINE;
+        }
         next LINE unless $foundheaderend;
         next LINE if $line =~ /<!-- Tekst -->/;
 
@@ -192,8 +202,10 @@ ARTICLE: foreach my $nyhet (@nyhet)
     while (!$done)
     {
         $done = 1;
-        $done = 0, substr($body, -4, 4) = '' if substr($body, -4) eq "<br>";
+        $done = 0, substr($body, 0, 4) = ''  if substr($body, 0, 4) eq '<br>';
+        $done = 0, substr($body, 0, 1) = ''  if substr($body, 0, 1) eq "\n";
         $done = 0, substr($body, -1, 1) = '' if substr($body, -1) eq "\n";
+        $done = 0, substr($body, -4, 4) = '' if substr($body, -4) eq "<br>";
     };
 
 
