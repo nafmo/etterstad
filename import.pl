@@ -3,36 +3,286 @@
 # We want to output UTF-8
 binmode(STDOUT, ':utf8');
 
-# Find all nyhet<num>.php
-opendir(my $enytt, 'enytt') or die "Unable to open enytt: $!\n";
-my @nyhet = sort { 
-    my $first = $a;
-    $first =~ s/[^0-9]//g;
-    my $second = $b;
-    $second =~ s/[^0-9]//g;
-    $first == $second ? $a cmp $b : $first <=> $second;
-} grep { /^nyhet[0-9].*php/ && -f "enytt/$_" } readdir($enytt);
-closedir $enytt;
-
+# Write pre-amble and root element
 open my $out, '>:encoding(utf-8)', 'enytt.xml'
     or die "Unable to write enytt.xml: $!";
-
-# Write pre-amble and root element
 print $out qq'<?xml version="1.0" encoding="utf-8"?>\n';
 print $out "<etterstad>\n";
 
-# Now read each article, and output one XML record per file
-ARTICLE: foreach my $nyhet (@nyhet)
+# First read all the old articles from arkivet.php; these only have a headline and a link
+# (sometimes to somewhere else). They are sorted in reverse chronological order, so read
+# them all first and then process
+open my $arkiv, '<:encoding(windows-1252):crlf', 'enytt/arkivet.php'
+    or die "Unable to open arkivet.php: $!";
+
+my @arkivnyhet;
+my %arkivnyhet;
+
+print "Reading arkivet.php\n";
+$/ = "\n";
+ARCHIVELINE: while (my $line = <$arkiv>)
 {
+    # Fix broken lines
+    $line =~ s/^032\.06\.0/03.06.09/;
+    $line =~ s/nyhet(8[3-5][0-9])i.php/nyhet$1.php/;
+
+    # Find lines with article links, internal or external
+    if ($line =~ /^ ?([0-9][0-9])\.([0-9][0-9])\.([0-9][0-9]) ?-? ? ?<a href="([^"]+)">(.*)<\/a>/ ||
+        $line =~ /^ ?([0-9][0-9])\.([0-9][0-9])\.([0-9][0-9]) ?-? ? ?<a href="([^"]+)"  ?target="_?blank""?>(.*)<\/a>/ ||
+        $line =~ /^ ?([0-9][0-9])\.([0-9][0-9])\.([0-9][0-9]) ?-? ? ?<a href="([^"]+)"><\/a>(.*)<br/)
+    {
+        # Extract metadata
+        my $pubdate = "20$3-$2-$1"; # YYYY-MM-DD
+        my $shortdate = "20$3$2$1"; # YYYYMMDD for Internet Archive
+        my ($url, $title) = ($4, $5);
+        #print "Found article $pubdate - $title\n";
+
+        if ($url =~ /http:\/\/www\.etterstad\.no\/(.*php)/)
+        {
+            # Store internal links directly, dropping link back to domain
+            my $php = $1;
+
+            # Drop the history pages; we should import these into a separate section
+            if ($php =~ /^historie/)
+            {
+                next ARCHIVELINE;
+            }
+
+            unshift(@arkivnyhet, $php);
+            $arkivnyhet{$php} = {
+                'date' => $pubdate,
+                'title' => $title,
+            };
+        }
+        else
+        {
+            # If this is an external link, assume the link is outdated;
+            # point to Internet Archive
+            if ($url =~ m@://@)
+            {
+                $url = "http://web.archive.org/web/${shortdate}000000/$url";
+                print "- pointing $pubdate to $url\n";
+            }
+            unshift(@arkivnyhet, $url);
+            $arkivnyhet{$url} = {
+                'date' => $pubdate,
+                'title' => $title,
+            };
+        }
+    }
+    else
+    {
+        # print "Skipping $line";
+    }
+}
+print "Done reading arkivet.php\n\n";
+close $arkiv;
+
+# Now import the archive articles. These all have their complete body in the
+# linked PHP file, or is just an external link
+print "Importing archived articles\n";
+foreach my $nyhet (@arkivnyhet)
+{
+    my ($pubdate, $title, $url) = ($arkivnyhet{$nyhet}->{date}, $arkivnyhet{$nyhet}->{title}, $nyhet);
+    print "Adding article ($pubdate - $title): ";
+    if ($url !~ m@://@ && $url =~ /php$/)
+    {
+        # Parse PHP file
+        print "parsing $url\n";
+        &parsearticle($out, $url, $pubdate, $title);
+    }
+    else
+    {
+        # External article, just print what we have
+        print "linking to $url\n";
+        &xmlrecord($out, $pubdate, $title, $pubdate, $pubdate, '', "&lt;a href=\"$url\"&gt;$title&lt;/a&gt;");
+    }
+}
+print "Done importing archived articles\n\n";
+
+# Next import the "current" news page (2018-); these have an entry with some text
+# and a link, some to internal articles, some external
+open my $index, '<:encoding(windows-1252):crlf', 'enytt/index.php'
+    or die "Unable to open arkivet.php: $!";
+
+my @indexnyhet;
+my %indexnyhet;
+
+print "Reading index.php\n";
+my $inrecord = 0;
+$/ = "\n";
+INDEXLINE: while (my $line = <$index>)
+{
+    # Each record start with a START marker and ends with SLUTT
+    if ($line =~ /<!-- SLUTT-->/ && $inrecord)
+    {
+        # Found end of record, output what we have
+        if ($headline eq 'Eldre nyheter')
+        {
+            print "- ignoring '$headline'\n";
+            next INDEXLINE;
+        }
+
+        unshift(@indexnyhet, $url);
+        $indexnyhet{$url} = {
+            'date' => $pubdate,
+            'updated' => $uppdate,
+            'title' => $headline,
+            'body' => $body,
+        };
+        $inrecord = 0;
+    }
+
+    # TODO: This is very much like what we parse in parsearticle...
+
+    # Find start of record
+    if ($line =~ /<!-- START -->/)
+    {
+        $inrecord = 1;
+        $foundheadline = 0;
+        $doneheadline = 0;
+        $headline = '';
+        $foundpubdate = 0;
+        $pubdate = '';
+        $foundupddate = 0;
+        $upddate = '';
+        $foundheaderend = 0;
+        $body = '';
+        $url = '';
+        $foundpostbodyend = 0;
+        next INDEXLINE;
+    }
+    next INDEXLINE unless $inrecord;
+
+    # Find headline, might span several lines
+    $foundheadline = 1 if $line =~ /^<b><big>/;
+    $doneheadline = 1 if $line =~ /^<\/big>/;
+    if ($foundheadline && !$doneheadline)
+    {
+        $line =~ s/^<b><big>//g;
+        $line =~ s/^<!-- Overskrift-->//g;
+        chomp $line;
+        $headline .= $line;
+    }
+
+    # Locate publish date
+    $foundpubdate = 1 if $line =~ /^Publisert/;
+    next INDEXLINE unless $foundpubdate;
+    if ($pubdate eq '')
+    {
+        if ($line =~ /([0-9][0-9])\.([0-9][0-9])\.([0-9][0-9])/)
+        {
+            $pubdate = "20$3-$2-$1"; # YYYY-MM-DD
+        }
+        next INDEXLINE;
+    }
+    # Locate edit date
+    $foundupddate = 1 if $line =~ /^Sist endret/;
+    next INDEXLINE unless $foundupddate;
+    if ($upddate eq '')
+    {
+        if ($line =~ /([0-9][0-9])\.([0-9][0-9])\.([0-9][0-9])/)
+        {
+            $upddate = "20$3-$2-$1"; # YYYY-MM-DD
+        }
+        next INDEXLINE;
+    }
+
+    # Locate article intro and link HTML
+    if (!$foundheaderend && $line =~ /<\/center>/)
+    {
+        $foundheaderend = 1;
+        next INDEXLINE;
+    }
+    next INDEXLINE unless $foundheaderend;
+
+    # Everything until </table> is the intro text; last line is typically a link
+    next INDEXLINE if $foundpostbodyend;
+    $foundpostbodyend = 1, print "== body ends\n", next INDEXLINE if $line =~ /<\/table>/;
+
+    # Find the link line
+    if ($line =~ />Les om/ ||
+        $line =~ />Les mer/ ||
+        $line =~ />Skriv under/ ||
+        $line =~ />bildene fra sommerfesten/)
+    {
+        if ($line =~ m'<a href="http://www\.etterstad\.no/(.*)\.php')
+        {
+            # Internal links are just substituted with their contents
+            $url = $1 . '.php';
+        }
+        elsif ($line =~ /<a href="([^"]+)">/)
+        {
+            # External links are kept as they are
+            $url = $1;
+            $body .= $line;
+        }
+    }
+    else
+    {
+        $body .= $line;
+    }
+}
+close $index;
+print "Done reading index.php\n\n";
+
+# Now import the current articles. Articles in linked PHP files have an external
+# body that we want to put in "read more" setting
+print "Importing current articles\n";
+foreach my $nyhet (@indexnyhet)
+{
+    my ($pubdate, $title, $body, $url) = ($indexnyhet{$nyhet}->{date}, $indexnyhet{$nyhet}->{title}, $indexnyhet{$nyhet}->{body}, $nyhet);
+    print "Adding article ($pubdate - $title): ";
+    if ($url !~ m@://@ && $url =~ /php$/)
+    {
+        # Parse PHP file
+        # TODO: Add $body
+        print "parsing $url\n";
+        &parsearticle($out, $url, $pubdate, $title);
+    }
+    else
+    {
+        # External article, just print what we have
+        print "linking to $url\n";
+        &xmlrecord($out, $pubdate, $title, $pubdate, $pubdate, '', $body);
+    }
+}
+print "Done importing current articles\n\n";
+
+# Close the root element
+print $out "</etterstad>\n";
+print "Done importing articles\n";
+0;
+
+# Read a single article, and output one XML record per file
+sub parsearticle
+{
+    my ($out, $nyhet, $origpubdate, $origheadline) = @_;
+
     # Ignore known bad files
-    next ARTICLE if $nyhet eq 'nyhet1a.php';
-    next ARTICLE if $nyhet eq 'nyhet2a.php';
-    next ARTICLE if $nyhet eq 'nyhet279a.php';
-    next ARTICLE if $nyhet eq 'nyhet279b.php';
-    next ARTICLE if $nyhet eq 'nyhet279c.php';
-    next ARTICLE if $nyhet eq 'nyhet565.php';
-    next ARTICLE if $nyhet eq 'nyhet909.php';
-    next ARTICLE if $nyhet eq 'nyhet1087.php';
+    if ($nyhet eq 'nyhet1a.php' ||
+        $nyhet eq 'nyhet2a.php' ||
+        $nyhet eq 'nyhet279a.php' ||
+        $nyhet eq 'nyhet279b.php' ||
+        $nyhet eq 'nyhet279c.php' ||
+        $nyhet eq 'nyhet565.php' ||
+        $nyhet eq 'nyhet909.php' ||
+        $nyhet eq 'nyhet1087.php' ||
+        $nyhet eq 'tur0.php' ||
+        $nyhet eq 'Stang.php' ||
+        $nyhet eq 'bokkafe31.php' ||
+        $nyhet eq 'bokkafe.php' ||
+        $nyhet =~ /^index\.php/)
+    {
+        print "- $nyhet ($origheadline) is known to be broken, ignoring\n";
+        return;
+    }
+    # Ignore some other files as well
+    if ($nyhet eq 'nyhet150.php')
+    {
+        print "- ignoring $nyhet ($origheadline)\n";
+        return;
+    }
 
     # Open and read the file
     open my $file, '<:encoding(windows-1252):crlf', 'enytt/' . $nyhet
@@ -48,6 +298,7 @@ ARTICLE: foreach my $nyhet (@nyhet)
     my $image = '';
     my $foundheaderend = 0;
     my $body = '';
+    my $line;
 
     # Read the entire file into a variable to allow us to handle multiple
     # file-endings (sometimes there are more than one in a single file)
@@ -195,6 +446,13 @@ ARTICLE: foreach my $nyhet (@nyhet)
     die "Could not parse update date in $nyhet" if $upddate eq '';
     die "Could not parse text body in $nyhet" unless $body =~ /\w/;
 
+    # Use the oldest publication date from index and article
+    if ($pubdate ne $origpubdate)
+    {
+        print "- $nyhet publication date $pubdate does not match index $origpubdate\n";
+        $pubdate = $origpubdate if $origpubdate lt $pubdate;
+    }
+
     # Drop trailing table close tag
     $body =~ s@</td></tr></table></td></tr></table><br>\n$@@ms;
     # Drop trailing <br>
@@ -208,6 +466,11 @@ ARTICLE: foreach my $nyhet (@nyhet)
         $done = 0, substr($body, -4, 4) = '' if substr($body, -4) eq "<br>";
     };
 
+    # If in-file headline is different from the index headline, we add it
+    if ($headline ne $origheadline)
+    {
+        $body = "<h1>$origheadline</h1>\n" . $body;
+    }
 
     # Escape body HTML to make it valid inside the XML file
     $body =~ s/&/&amp;/g;
@@ -215,8 +478,15 @@ ARTICLE: foreach my $nyhet (@nyhet)
     $body =~ s/>/&gt;/g;
 
     # Output an XML record for this post
+    &xmlrecord($out, $nyhet, $headline, $pubdate, $upddate, $image, $body);
+}
+
+sub xmlrecord
+{
+    my ($out, $id, $headline, $pubdate, $upddate, $image, $body) = @_;
+
     print $out "<article>\n";
-    print $out "  <id>$nyhet</id>\n";
+    print $out "  <id>$id</id>\n";
     print $out "  <headline>$headline</headline>\n";
     print $out "  <published>$pubdate</published>\n";
     print $out "  <edited>$upddate</edited>\n";
@@ -225,5 +495,3 @@ ARTICLE: foreach my $nyhet (@nyhet)
     print $out "</article>\n";
 }
 
-# Close the root element
-print $out "</etterstad>\n";
