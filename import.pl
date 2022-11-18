@@ -1,5 +1,7 @@
 #!/usr/bin/perl -w
 
+use utf8;
+
 # We want to output UTF-8
 binmode(STDOUT, ':utf8');
 
@@ -27,7 +29,7 @@ ARCHIVELINE: while (my $line = <$arkiv>)
     $line =~ s/nyhet(8[3-5][0-9])i.php/nyhet$1.php/;
 
     # Find lines with article links, internal or external
-    if ($line =~ /^ ?([0-9][0-9])\.([0-9][0-9])\.([0-9][0-9]) ?-? ? ?<a href="([^"]+)">(.*)<\/a>/ ||
+    if ($line =~ /^ ?([0-9][0-9])\.([0-9][0-9])\.([0-9][0-9]) ?-? ? ?<a href="([^"]+)">(.+)<\/a>/ ||
         $line =~ /^ ?([0-9][0-9])\.([0-9][0-9])\.([0-9][0-9]) ?-? ? ?<a href="([^"]+)"  ?target="_?blank""?>(.*)<\/a>/ ||
         $line =~ /^ ?([0-9][0-9])\.([0-9][0-9])\.([0-9][0-9]) ?-? ? ?<a href="([^"]+)"><\/a>(.*)<br/)
     {
@@ -48,6 +50,12 @@ ARCHIVELINE: while (my $line = <$arkiv>)
                 next ARCHIVELINE;
             }
 
+            # Some of the stories are linked twice, keep the newest (first) copy
+            if (defined $arkivnyhet{$php})
+            {
+                print "Duplicate link $php at $pubdate (already seen at $arkivnyhet{$php}->{date})\n";
+                next ARCHIVELINE;
+            }
             unshift(@arkivnyhet, $php);
             $arkivnyhet{$php} = {
                 'date' => $pubdate,
@@ -63,6 +71,13 @@ ARCHIVELINE: while (my $line = <$arkiv>)
                 $url = "http://web.archive.org/web/${shortdate}000000/$url";
                 print "- pointing $pubdate to $url\n";
             }
+
+            # Some of the stories are linked twice, keep the newest (first) copy
+            if (defined $arkivnyhet{$url})
+            {
+                print "Duplicate link $url at $pubdate (already seen at $arkivnyhet{$url}->{date})\n";
+                next ARCHIVELINE;
+            }
             unshift(@arkivnyhet, $url);
             $arkivnyhet{$url} = {
                 'date' => $pubdate,
@@ -77,28 +92,6 @@ ARCHIVELINE: while (my $line = <$arkiv>)
 }
 print "Done reading arkivet.php\n\n";
 close $arkiv;
-
-# Now import the archive articles. These all have their complete body in the
-# linked PHP file, or is just an external link
-print "Importing archived articles\n";
-foreach my $nyhet (@arkivnyhet)
-{
-    my ($pubdate, $title, $url) = ($arkivnyhet{$nyhet}->{date}, $arkivnyhet{$nyhet}->{title}, $nyhet);
-    print "Adding article ($pubdate - $title): ";
-    if ($url !~ m@://@ && $url =~ /php$/)
-    {
-        # Parse PHP file
-        print "parsing $url\n";
-        &parsearticle($out, $url, $pubdate, $title);
-    }
-    else
-    {
-        # External article, just print what we have
-        print "linking to $url\n";
-        &xmlrecord($out, $pubdate, $title, $pubdate, $pubdate, '', "&lt;a href=\"$url\"&gt;$title&lt;/a&gt;");
-    }
-}
-print "Done importing archived articles\n\n";
 
 # Next import the "current" news page (2018-); these have an entry with some text
 # and a link, some to internal articles, some external
@@ -120,13 +113,39 @@ INDEXLINE: while (my $line = <$index>)
         if ($headline eq 'Eldre nyheter')
         {
             print "- ignoring '$headline'\n";
+            $inrecord = 0;
             next INDEXLINE;
         }
 
+        # A few posts have only a one-line body and no link
+        if ($url eq '' &&
+            ($headline =~ 'Årsmøte,? Etterstad vel' ||
+             $headline eq 'Vann!   Vann!'))
+        {
+            print "- allowing '$headline' with no link\n";
+            $url = 'dummy:' . $pubdate;
+        }
+
+        # One story is duplicated in index, keep newest
+        if ($url eq 'nyhet1125.php' && defined $indexnyhet{$url})
+        {
+            print "- ignoring $pubdate $headline ($url already linked}\n";
+            $inrecord = 0;
+            next INDEXLINE;
+        }
+
+        die "No link found for $pubdate $headline\n"
+            if $url eq '';
+        die "No headline found for $pubdate $url\n"
+            if $headline eq '';
+        die "No pubdate found for $headline $url\n"
+            if $pubdate eq '';
+        die "Duplicate link $url at $pubdate (already seen at $indexnyhet{$url}->{date})\n"
+            if defined $indexnyhet{$url};
         unshift(@indexnyhet, $url);
         $indexnyhet{$url} = {
             'date' => $pubdate,
-            'updated' => $uppdate,
+            'updated' => $upddate,
             'title' => $headline,
             'body' => $body,
         };
@@ -181,7 +200,7 @@ INDEXLINE: while (my $line = <$index>)
     next INDEXLINE unless $foundupddate;
     if ($upddate eq '')
     {
-        if ($line =~ /([0-9][0-9])\.([0-9][0-9])\.([0-9][0-9])/)
+        if ($line =~ /([0-9][0-9])\.?([0-9][0-9])\.([0-9][0-9])/)
         {
             $upddate = "20$3-$2-$1"; # YYYY-MM-DD
         }
@@ -204,7 +223,9 @@ INDEXLINE: while (my $line = <$index>)
     if ($line =~ />Les om/ ||
         $line =~ />Les mer/ ||
         $line =~ />Skriv under/ ||
-        $line =~ />bildene fra sommerfesten/)
+        $line =~ />HageLarms side/ ||
+        $line =~ />Loppemarked i kolonihagen/ ||
+        $line =~ />bildene fra [sS]ommerfesten/)
     {
         if ($line =~ m'<a href="http://www\.etterstad\.no/(.*)\.php')
         {
@@ -226,6 +247,33 @@ INDEXLINE: while (my $line = <$index>)
 close $index;
 print "Done reading index.php\n\n";
 
+# Now import the archive articles. These all have their complete body in the
+# linked PHP file, or is just an external link
+print "Importing archived articles\n";
+ARCHIVEENTRY: foreach my $nyhet (@arkivnyhet)
+{
+    my ($pubdate, $title, $url) = ($arkivnyhet{$nyhet}->{date}, $arkivnyhet{$nyhet}->{title}, $nyhet);
+    if (defined $indexnyhet{$url}) {
+        print "Dropping archived article that is also in current ($pubdate - $title)\n";
+        next ARCHIVEENTRY;
+    }
+
+    print "Adding article ($pubdate - $title): ";
+    if ($url !~ m@://@ && $url =~ /php$/)
+    {
+        # Parse PHP file
+        print "parsing $url\n";
+        &parsearticle($out, $url, $pubdate, $title);
+    }
+    else
+    {
+        # External article, just print what we have
+        print "linking to $url\n";
+        &xmlrecord($out, $pubdate, $title, $pubdate, $pubdate, '', "&lt;a href=\"$url\"&gt;$title&lt;/a&gt;");
+    }
+}
+print "Done importing archived articles\n\n";
+
 # Now import the current articles. Articles in linked PHP files have an external
 # body that we want to put in "read more" setting
 print "Importing current articles\n";
@@ -239,6 +287,12 @@ foreach my $nyhet (@indexnyhet)
         # TODO: Add $body
         print "parsing $url\n";
         &parsearticle($out, $url, $pubdate, $title);
+    }
+    elsif ($url =~ /^dummy/)
+    {
+        # No link to parse, just the body from the index page
+        print "article has no external body nor link\n";
+        &xmlrecord($out, $pubdate, $title, $pubdate, $pubdate, '', $body);
     }
     else
     {
@@ -446,11 +500,11 @@ sub parsearticle
     die "Could not parse update date in $nyhet" if $upddate eq '';
     die "Could not parse text body in $nyhet" unless $body =~ /\w/;
 
-    # Use the oldest publication date from index and article
+    # Always use the publication date listed in the index
     if ($pubdate ne $origpubdate)
     {
         print "- $nyhet publication date $pubdate does not match index $origpubdate\n";
-        $pubdate = $origpubdate if $origpubdate lt $pubdate;
+        $pubdate = $origpubdate;
     }
 
     # Drop trailing table close tag
