@@ -5,11 +5,55 @@ use utf8;
 # We want to output UTF-8
 binmode(STDOUT, ':utf8');
 
-# Write pre-amble and root element
+# Write export opening
 open my $out, '>:encoding(utf-8)', 'enytt.xml'
     or die "Unable to write enytt.xml: $!";
-print $out qq'<?xml version="1.0" encoding="utf-8"?>\n';
-print $out "<etterstad>\n";
+my $now = scalar localtime;
+print $out <<"EOM";
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:excerpt="http://wordpress.org/export/1.2/excerpt/"
+ xmlns:content="http://purl.org/rss/1.0/modules/content/"
+ xmlns:wfw="http://wellformedweb.org/CommentAPI/"
+ xmlns:dc="http://purl.org/dc/elements/1.1/"
+ xmlns:wp="http://wordpress.org/export/1.2/">
+<channel>
+ <title>Etterstad Vel</title>
+ <link>http://etterstad.no/</link>
+ <description>Etterstad.no</description>
+ <pubDate>$now</pubDate>
+ <language>nb</language>
+ <wp:wxr_version>1.2</wp:wxr_version>
+ <wp:base_site_url>http://etterstad.no/</wp:base_site_url>
+ <wp:base_blog_url>http://etterstad.no/</wp:base_blog_url>
+ <wp:author>
+  <wp:author_id>1</wp:author_id>
+  <wp:author_login>etterstad</wp:author_login>
+  <wp:author_email>post\@etterstad.no</wp:author_email>
+  <wp:author_display_name>Etterstad.no</wp:author_display_name>
+ </wp:author>
+EOM
+
+# Write categories
+my %categories = (
+    'nyhet' => 1,
+    'lenke' => 2,
+    'info' => 3,
+);
+my $catnum = 0;
+foreach my $category (sort(keys %categories))
+{
+    print $out <<"EOM";
+ <wp:category>
+  <wp:term_id>$categories{$category}</wp:term_id>
+  <wp:category_nicename>$category</wp:category_nicename>
+  <wp:category_parent></wp:category_parent>
+  <wp:cat_name>$category</wp:cat_name>
+ </wp:category>
+EOM
+}
+
+# Count posts
+my $postnum = 0;
 
 # First read all the old articles from arkivet.php; these only have a headline and a link
 # (sometimes to somewhere else). They are sorted in reverse chronological order, so read
@@ -37,6 +81,7 @@ ARCHIVELINE: while (my $line = <$arkiv>)
         my $pubdate = "20$3-$2-$1"; # YYYY-MM-DD
         my $shortdate = "20$3$2$1"; # YYYYMMDD for Internet Archive
         my ($url, $title) = ($4, $5);
+        $title =~ s/<[^>]+>//g;
         #print "Found article $pubdate - $title\n";
 
         if ($url =~ /http:\/\/www\.etterstad\.no\/(.*php)/)
@@ -60,6 +105,7 @@ ARCHIVELINE: while (my $line = <$arkiv>)
             $arkivnyhet{$php} = {
                 'date' => $pubdate,
                 'title' => $title,
+                'num' => ++ $postnum,
             };
         }
         else
@@ -82,6 +128,7 @@ ARCHIVELINE: while (my $line = <$arkiv>)
             $arkivnyhet{$url} = {
                 'date' => $pubdate,
                 'title' => $title,
+                'num' => ++ $postnum,
             };
         }
     }
@@ -148,6 +195,7 @@ INDEXLINE: while (my $line = <$index>)
             'updated' => $upddate,
             'title' => $headline,
             'body' => $body,
+            'num' => ++ $postnum,
         };
         $inrecord = 0;
     }
@@ -249,10 +297,11 @@ print "Done reading index.php\n\n";
 
 # Now import the archive articles. These all have their complete body in the
 # linked PHP file, or is just an external link
+my %redirect;
 print "Importing archived articles\n";
 ARCHIVEENTRY: foreach my $nyhet (@arkivnyhet)
 {
-    my ($pubdate, $title, $url) = ($arkivnyhet{$nyhet}->{date}, $arkivnyhet{$nyhet}->{title}, $nyhet);
+    my ($pubdate, $title, $url, $num) = ($arkivnyhet{$nyhet}->{date}, $arkivnyhet{$nyhet}->{title}, $nyhet, $arkivnyhet{$nyhet}->{num});
     if (defined $indexnyhet{$url}) {
         print "Dropping archived article that is also in current ($pubdate - $title)\n";
         next ARCHIVEENTRY;
@@ -263,13 +312,13 @@ ARCHIVEENTRY: foreach my $nyhet (@arkivnyhet)
     {
         # Parse PHP file
         print "parsing $url\n";
-        &parsearticle($out, $url, $pubdate, $title);
+        &parsearticle($out, $num, $url, $pubdate, $title, $num);
     }
     else
     {
         # External article, just print what we have
         print "linking to $url\n";
-        &xmlrecord($out, $pubdate, $title, $pubdate, $pubdate, '', "&lt;a href=\"$url\"&gt;$title&lt;/a&gt;");
+        &xmlrecord($out, $num, $pubdate, $title, $pubdate, $pubdate, '', "&lt;a href=\"$url\"&gt;$title&lt;/a&gt;");
     }
 }
 print "Done importing archived articles\n\n";
@@ -279,39 +328,54 @@ print "Done importing archived articles\n\n";
 print "Importing current articles\n";
 foreach my $nyhet (@indexnyhet)
 {
-    my ($pubdate, $title, $body, $url) = ($indexnyhet{$nyhet}->{date}, $indexnyhet{$nyhet}->{title}, $indexnyhet{$nyhet}->{body}, $nyhet);
+    my ($pubdate, $title, $body, $url, $num) = ($indexnyhet{$nyhet}->{date}, $indexnyhet{$nyhet}->{title}, $indexnyhet{$nyhet}->{body}, $nyhet, $indexnyhet{$nyhet}->{num});
     print "Adding article ($pubdate - $title): ";
     if ($url !~ m@://@ && $url =~ /php$/)
     {
         # Parse PHP file
         # TODO: Add $body
         print "parsing $url\n";
-        &parsearticle($out, $url, $pubdate, $title);
+        &parsearticle($out, $num, $url, $pubdate, $title);
     }
     elsif ($url =~ /^dummy/)
     {
         # No link to parse, just the body from the index page
         print "article has no external body nor link\n";
-        &xmlrecord($out, $pubdate, $title, $pubdate, $pubdate, '', $body);
+        &xmlrecord($out, $num, $pubdate, $title, $pubdate, $pubdate, '', $body);
     }
     else
     {
         # External article, just print what we have
         print "linking to $url\n";
-        &xmlrecord($out, $pubdate, $title, $pubdate, $pubdate, '', $body);
+        &xmlrecord($out, $num, $pubdate, $title, $pubdate, $pubdate, '', $body);
     }
 }
 print "Done importing current articles\n\n";
 
-# Close the root element
-print $out "</etterstad>\n";
-print "Done importing articles\n";
+# Close the RSS feed
+print $out "</channel></rss>\n";
+print "Done importing articles\n\n";
+
+# Write htaccess rewrite rules
+print "Exporting article redirect map\n";
+open my $htaccess, '>:encoding(utf-8)', 'htaccess.txt'
+    or die "Unable to write enytt.xml: $!";
+foreach my $old (sort(keys %redirect))
+{
+    print $htaccess qq'Redirect permanent "$old" "$redirect{$old}"\n';
+    # Old-format links
+    my $oldformat = 'index.php?vis=' . $old;
+    $oldformat =~ s/\.php$//g;
+    print $htaccess qq'Redirect permanent "$oldformat" "$redirect{$old}"\n';
+}
+close $htaccess;
+print "Done exporting article redirect map\n";
 0;
 
 # Read a single article, and output one XML record per file
 sub parsearticle
 {
-    my ($out, $nyhet, $origpubdate, $origheadline) = @_;
+    my ($out, $num, $nyhet, $origpubdate, $origheadline) = @_;
 
     # Ignore known bad files
     if ($nyhet eq 'nyhet1a.php' ||
@@ -526,26 +590,69 @@ sub parsearticle
         $body = "<h1>$origheadline</h1>\n" . $body;
     }
 
-    # Escape body HTML to make it valid inside the XML file
-    $body =~ s/&/&amp;/g;
-    $body =~ s/</&lt;/g;
-    $body =~ s/>/&gt;/g;
-
     # Output an XML record for this post
-    &xmlrecord($out, $nyhet, $headline, $pubdate, $upddate, $image, $body);
+    &xmlrecord($out, $num, $nyhet, $headline, $pubdate, $upddate, $image, $body);
 }
 
 sub xmlrecord
 {
-    my ($out, $id, $headline, $pubdate, $upddate, $image, $body) = @_;
+    my ($out, $num, $id, $headline, $pubdate, $upddate, $image, $body) = @_;
 
-    print $out "<article>\n";
-    print $out "  <id>$id</id>\n";
-    print $out "  <headline>$headline</headline>\n";
-    print $out "  <published>$pubdate</published>\n";
-    print $out "  <edited>$upddate</edited>\n";
-    print $out "  <image>$image</image>\n" if $image ne '';
-    print $out "  <body>$body</body>\n";
-    print $out "</article>\n";
+    # Make a permalink http://etterstad.no/YYYY/MM/DD/title
+    my $ymdurl = $pubdate;
+    $ymdurl =~ s/-/\//g;
+    my $headlineurl = lc($headline);
+    $headlineurl =~ tr/æøå /aoa-/;
+    $headlineurl =~ s/[^-a-z0-9_]//g;
+    my $linkname = "http://etterstad.no/$ymdurl/$headlineurl";
+
+    # Select a (rough) category for the post
+    my $category = '';
+    if ($id =~ /^nyhet/)
+    {
+        $category = 'nyhet';
+        die "Duplicate redirect $id" if defined $redirect{$id};
+        $redirect{$id} = $linkname;
+    }
+    elsif ($id =~ /^20/)
+    {
+        $category = 'lenke';
+    }
+    elsif ($id =~ /php$/)
+    {
+        $category = 'info';
+        die "Duplicate redirect $id" if defined $redirect{$id};
+        $redirect{$id} = $linkname;
+    }
+    die "No category from id=$id (pubdate=$pubdate headline=$headline)\n" if $category eq '';
+    die "Undefined category $category" if !defined $categories{$category};
+
+    # Output the post in WordPress extended RSS format
+    print $out <<"EOM";
+ <item>
+  <title><![CDATA[$headline]]></title>
+  <link>$linkname</link>
+  <pubDate>$pubdate</pubDate>
+  <dc:creator>etterstad</dc:creator>
+  <guid isPermaLink="false">http://etterstad.no/$id</guid>
+  <description></description>
+  <excerpt:encoded></excerpt:encoded>
+  <content:encoded><![CDATA[$body]]></content:encoded>
+  <wp:post_id>$num</wp:post_id>
+  <wp:post_date>$pubdate</wp:post_date>
+  <wp:post_date_gmt>$pubdate</wp:post_date_gmt>
+  <wp:post_modified>$upddate</wp:post_modified>
+  <wp:post_modified_gmt>$upddate</wp:post_modified_gmt>
+  <wp:comment_status>closed</wp:comment_status>
+  <wp:ping_status>closed</wp:ping_status>
+  <wp:post_name>$headlineurl</wp:post_name>
+  <wp:status>publish</wp:status>
+  <wp:post_parent>0</wp:post_parent>
+  <wp:menu_order>0</wp:menu_order>
+  <wp:post_type>post</wp:post_type>
+  <wp:post_password></wp:post_password>
+  <wp:is_sticky>0</wp:is_sticky>
+  <category domain="category" nicename="$category">$category</category>
+ </item>
+EOM
 }
-
