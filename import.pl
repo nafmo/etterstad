@@ -101,6 +101,21 @@ ARCHIVELINE: while (my $line = <$arkiv>)
                 print "Duplicate link $php at $pubdate (already seen at $arkivnyhet{$php}->{date})\n";
                 next ARCHIVELINE;
             }
+
+            # Add some bonus content
+            if ($php eq 'nyhet016.php')
+            {
+                foreach my $subpage (('b', 'c', 'd', 'h', 'e', 'f', 'g'))
+                {
+                    unshift(@arkivnyhet, "nyhet016$subpage.php");
+                    $arkivnyhet{"nyhet016$subpage.php"} = {
+                        'date' => $pubdate,
+                        'title' => $title,
+                        'num' => ++ $postnum,
+                    };
+                }
+            }
+
             unshift(@arkivnyhet, $php);
             $arkivnyhet{$php} = {
                 'date' => $pubdate,
