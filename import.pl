@@ -464,6 +464,28 @@ sub parsearticle
         # Ignore everything up to "Overskrift"
         $foundstart = 1 if $line =~ /^<!-- Overskrift-->/;
         $foundstart = 1 if $line =~ /^<!-- Overskrift---->/; # nyhet566.php is broken
+        if (!$foundstart)
+        {
+            # Some files are broken, find the headline anyway
+            if ($line =~ /^<b><big>([^<>]+)$/)
+            {
+                $headline = $1;
+                $foundstart = 1;
+                next LINE;
+            }
+            if ($line =~ /^<b><big>([^<>]+)<br>([^<>]+)$/)
+            {
+                $headline = "$1 - $2";
+                $foundstart = 1;
+                next LINE;
+            }
+            if ($line =~ /^<b>([(]litt viktig[)]) <big>([^<>]+)$/)
+            {
+                $headline = "$1 - $2";
+                $foundstart = 1;
+                next LINE;
+            }
+        }
         $foundstart = 1, next LINE if $line =~ /^<b><big>/; # a few files are missing the comment
         next LINE unless $foundstart;
 
@@ -476,7 +498,15 @@ sub parsearticle
         {
             chomp $line;
             $line =~ s/<!-- Overskrift-->//g;
-            $headline = $line;
+            $line =~ s/<[^>]+>//g;
+            if ($line =~ /^Publisert/)
+            {
+                $headline = ' '; # Nothing parsed
+            }
+            else
+            {
+                $headline = $line;
+            }
             next LINE;
         }
 
@@ -559,10 +589,11 @@ sub parsearticle
     die "Did not find <!--  Oppd. dato --> in $nyhet" unless $foundupddate;
     die "Did not find <!--Bilde --> in $nyhet" unless $foundimage;
     die "Did not find </center> (end of header) in $nyhet" unless $foundheaderend;
-    die "Could not parse headline in $nyhet" if $headline eq '';
+    die "Could not parse headline in $nyhet" if $headline eq '' || $headline eq ' ';
     die "Could not parse publish date in $nyhet" if $pubdate eq '';
     die "Could not parse update date in $nyhet" if $upddate eq '';
     die "Could not parse text body in $nyhet" unless $body =~ /\w/;
+    die "Misparsed headline in $nyhet" if $headline =~ /^Publisert/;
 
     # Always use the publication date listed in the index
     if ($pubdate ne $origpubdate)
