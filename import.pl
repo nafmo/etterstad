@@ -295,10 +295,20 @@ INDEXLINE: while (my $line = <$index>)
 close $index;
 print "Done reading index.php\n\n";
 
+# Keep user-friendly URLs for all pages
+my %redirect;
+
+# Some redirects for pages just saying a page is gone; some of these do not
+# actually exist in the archive...
+$redirect{'nyhet012b.php'} = 'http://web.archive.org/web/*/https://www.oslo.kommune.no/dok/Byr/2002/BR1/2001021582-1.htm';
+$redirect{'nyhet257b.php'} = 'http://web.archive.org/web/20111113073723/http://www.etterstad-blomster.no/';
+$redirect{'nyhet218c.php'} = 'http://web.archive.org/web/';
+$redirect{'nyhet423b.php'} = 'http://web.archive.org/web/*/http://web102881.pbe.oslo.kommune.no/saksinnsyn/casedet.asp?mode=all&amp;caseno=201117636&amp;sti=A';
+
 # Now import the archive articles. These all have their complete body in the
 # linked PHP file, or is just an external link
-my %redirect;
 print "Importing archived articles\n";
+my $xml = '';
 ARCHIVEENTRY: foreach my $nyhet (@arkivnyhet)
 {
     my ($pubdate, $title, $url, $num) = ($arkivnyhet{$nyhet}->{date}, $arkivnyhet{$nyhet}->{title}, $nyhet, $arkivnyhet{$nyhet}->{num});
@@ -312,13 +322,13 @@ ARCHIVEENTRY: foreach my $nyhet (@arkivnyhet)
     {
         # Parse PHP file
         print "parsing $url\n";
-        &parsearticle($out, $num, $url, $pubdate, $title, $num);
+        $xml .= &parsearticle($out, $num, $url, $pubdate, $title, $num);
     }
     else
     {
         # External article, just print what we have
         print "linking to $url\n";
-        &xmlrecord($out, $num, $pubdate, $title, $pubdate, $pubdate, '', "&lt;a href=\"$url\"&gt;$title&lt;/a&gt;");
+        $xml .= &xmlrecord($out, $num, $pubdate, $title, $pubdate, $pubdate, '', "&lt;a href=\"$url\"&gt;$title&lt;/a&gt;");
     }
 }
 print "Done importing archived articles\n\n";
@@ -335,22 +345,27 @@ foreach my $nyhet (@indexnyhet)
         # Parse PHP file
         # TODO: Add $body
         print "parsing $url\n";
-        &parsearticle($out, $num, $url, $pubdate, $title);
+        $xml .= &parsearticle($out, $num, $url, $pubdate, $title);
     }
     elsif ($url =~ /^dummy/)
     {
         # No link to parse, just the body from the index page
         print "article has no external body nor link\n";
-        &xmlrecord($out, $num, $pubdate, $title, $pubdate, $pubdate, '', $body);
+        $xml .= &xmlrecord($out, $num, $pubdate, $title, $pubdate, $pubdate, '', $body);
     }
     else
     {
         # External article, just print what we have
         print "linking to $url\n";
-        &xmlrecord($out, $num, $pubdate, $title, $pubdate, $pubdate, '', $body);
+        $xml .= &xmlrecord($out, $num, $pubdate, $title, $pubdate, $pubdate, '', $body);
     }
 }
 print "Done importing current articles\n\n";
+
+# Rewrite URLs
+$xml =~ s/<a href="(nyhet[^">]+php)"/sprintf('<a href="%s"',&findredirect($1));/ge;
+$xml =~ s/<a href="http:\/\/www\.etterstad\.no\/(nyhet[^">]+php)"/sprintf('<a href="%s"',&findredirect($1));/ge;
+print $out $xml;
 
 # Close the RSS feed
 print $out "</channel></rss>\n";
@@ -393,13 +408,13 @@ sub parsearticle
         $nyhet =~ /^index\.php/)
     {
         print "- $nyhet ($origheadline) is known to be broken, ignoring\n";
-        return;
+        return '';
     }
     # Ignore some other files as well
     if ($nyhet eq 'nyhet150.php')
     {
         print "- ignoring $nyhet ($origheadline)\n";
-        return;
+        return '';
     }
 
     # Open and read the file
@@ -622,7 +637,7 @@ sub parsearticle
     }
 
     # Output an XML record for this post
-    &xmlrecord($out, $num, $nyhet, $headline, $pubdate, $upddate, $image, $body);
+    return &xmlrecord($out, $num, $nyhet, $headline, $pubdate, $upddate, $image, $body);
 }
 
 sub xmlrecord
@@ -642,7 +657,7 @@ sub xmlrecord
     if ($id =~ /^nyhet/)
     {
         $category = 'nyhet';
-        die "Duplicate redirect $id" if defined $redirect{$id};
+        die "Duplicate redirect $id" if defined $redirect{$id} && $redirect{$id} ne $linkname;
         $redirect{$id} = $linkname;
     }
     elsif ($id =~ /^20/)
@@ -652,14 +667,14 @@ sub xmlrecord
     elsif ($id =~ /php$/)
     {
         $category = 'info';
-        die "Duplicate redirect $id" if defined $redirect{$id};
+        die "Duplicate redirect $id" if defined $redirect{$id} && $redirect{$id} ne $linkname;
         $redirect{$id} = $linkname;
     }
     die "No category from id=$id (pubdate=$pubdate headline=$headline)\n" if $category eq '';
     die "Undefined category $category" if !defined $categories{$category};
 
     # Output the post in WordPress extended RSS format
-    print $out <<"EOM";
+    return <<"EOM";
  <item>
   <title><![CDATA[$headline]]></title>
   <link>$linkname</link>
@@ -686,4 +701,11 @@ sub xmlrecord
   <category domain="category" nicename="$category">$category</category>
  </item>
 EOM
+}
+
+sub findredirect
+{
+    my $origurl = shift;
+    return $redirect{$origurl} if defined $redirect{$origurl};
+    return $origurl;
 }
