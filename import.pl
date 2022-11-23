@@ -55,6 +55,30 @@ EOM
 # Count posts
 my $postnum = 0;
 
+# Some pages link to a next page that itself is not indexed
+my %next = (
+    '022' => '023',
+    '024' => '025',
+    '072' => '072b',
+    '073' => '073b',
+    '089' => '091',
+    '122' => '123',
+    '217' => '217b',
+    '218' => '218b',
+    '277' => '280',
+    '359' => '360',
+    '361' => '362',
+    '459' => '459b',
+    '547' => '548',
+    '614' => '615',
+    '744' => '746',
+    '894' => '895',
+    '1041' => '1042',
+    '1044' => '1043',
+    '1144' => '1145',
+    '1158' => '1159',
+);
+
 # First read all the old articles from arkivet.php; these only have a headline and a link
 # (sometimes to somewhere else). They are sorted in reverse chronological order, so read
 # them all first and then process
@@ -84,6 +108,9 @@ ARCHIVELINE: while (my $line = <$arkiv>)
         $title =~ s/<[^>]+>//g;
         #print "Found article $pubdate - $title\n";
 
+        # Drop broken article link
+        next ARCHIVELINE if $pubdate eq '2010-05-27';
+
         if ($url =~ /http:\/\/www\.etterstad\.no\/(.*php)/)
         {
             # Store internal links directly, dropping link back to domain
@@ -103,6 +130,28 @@ ARCHIVELINE: while (my $line = <$arkiv>)
             }
 
             # Add some bonus content
+            if ($php eq 'nyhet014.php')
+            {
+                foreach my $subpage (('b', 'c'))
+                {
+                    unshift(@arkivnyhet, "nyhet014$subpage.php");
+                    $arkivnyhet{"nyhet014$subpage.php"} = {
+                        'date' => $pubdate,
+                        'title' => $title,
+                        'num' => ++ $postnum,
+                    };
+                }
+                foreach my $subpage (('a', 'b', 'c', 'd', 'e'))
+                {
+                    unshift(@arkivnyhet, "nyhet015$subpage.php");
+                    $arkivnyhet{"nyhet015$subpage.php"} = {
+                        'date' => $pubdate,
+                        'title' => $title,
+                        'num' => ++ $postnum,
+                    };
+                }
+            }
+
             if ($php eq 'nyhet016.php')
             {
                 foreach my $subpage (('b', 'c', 'd', 'h', 'e', 'f', 'g'))
@@ -116,12 +165,148 @@ ARCHIVELINE: while (my $line = <$arkiv>)
                 }
             }
 
+            if ($php eq 'nyhet211.php')
+            {
+                foreach my $subpage (('b', 'c', 'd', 'e', 'f', 'g', 'h'))
+                {
+                    unshift(@arkivnyhet, "nyhet211$subpage.php");
+                    $arkivnyhet{"nyhet211$subpage.php"} = {
+                        'date' => $pubdate,
+                        'title' => $title,
+                        'num' => ++ $postnum,
+                    };
+                }
+            }
+
+            if ($php eq 'nyhet212.php')
+            {
+                foreach my $subpage (('b', 'c', 'd', 'e', 'f', 'g', 'h',  'i','j'))
+                {
+                    unshift(@arkivnyhet, "nyhet212$subpage.php");
+                    $arkivnyhet{"nyhet212$subpage.php"} = {
+                        'date' => $pubdate,
+                        'title' => $title,
+                        'num' => ++ $postnum,
+                    };
+                }
+            }
+
+            if ($php eq 'nyhet321.php')
+            {
+                foreach my $subpage (('a', 'b', 'c'))
+                {
+                    unshift(@arkivnyhet, "nyhet321$subpage.php");
+                    $arkivnyhet{"nyhet321$subpage.php"} = {
+                        'date' => $pubdate,
+                        'title' => $title,
+                        'num' => ++ $postnum,
+                    };
+                }
+            }
+
+            if ($php eq 'nyhet329.php')
+            {
+                foreach my $subpage (('a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'))
+                {
+                    unshift(@arkivnyhet, "nyhet329$subpage.php");
+                    $arkivnyhet{"nyhet329$subpage.php"} = {
+                        'date' => $pubdate,
+                        'title' => $title,
+                        'num' => ++ $postnum,
+                    };
+                }
+            }
+
+            if ($php eq 'nyhet404a.php')
+            {
+                foreach my $subpage (('', 'b', 'c', 'd', 'e', 'f'))
+                {
+                    unshift(@arkivnyhet, "nyhet404$subpage.php");
+                    $arkivnyhet{"nyhet404$subpage.php"} = {
+                        'date' => $pubdate,
+                        'title' => $title,
+                        'num' => ++ $postnum,
+                    };
+                }
+            }
+
+            if ($php eq 'nyhet432a.php')
+            {
+                foreach my $subpage (('b', 'c', 'd'))
+                {
+                    unshift(@arkivnyhet, "nyhet432$subpage.php");
+                    $arkivnyhet{"nyhet432$subpage.php"} = {
+                        'date' => $pubdate,
+                        'title' => $title,
+                        'num' => ++ $postnum,
+                    };
+                }
+            }
+
             unshift(@arkivnyhet, $php);
             $arkivnyhet{$php} = {
                 'date' => $pubdate,
                 'title' => $title,
                 'num' => ++ $postnum,
             };
+
+            # Add additional links where necessary
+            if ($php eq 'vterrasse.php')
+            {
+                foreach my $subpage (('052', '054'))
+                {
+                    $php = "nyhet${subpage}.php";
+                    unshift(@arkivnyhet, $php);
+                    $arkivnyhet{$php} = {
+                        'date' => $pubdate,
+                        'title' => $title,
+                        'num' => ++ $postnum,
+                    };
+                }
+            }
+
+            if ($php eq 'nyhet107b.php')
+            {
+                foreach my $subpage (('108', '109'))
+                {
+                    $php = "nyhet${subpage}.php";
+                    unshift(@arkivnyhet, $php);
+                    $arkivnyhet{$php} = {
+                        'date' => $pubdate,
+                        'title' => $title,
+                        'num' => ++ $postnum,
+                    };
+                }
+            }
+
+            if ($php eq 'nyhet204.php')
+            {
+                foreach my $subpage (('204b', '206'))
+                {
+                    $php = "nyhet${subpage}.php";
+                    unshift(@arkivnyhet, $php);
+                    $arkivnyhet{$php} = {
+                        'date' => $pubdate,
+                        'title' => $title,
+                        'num' => ++ $postnum,
+                    };
+                }
+            }
+
+            # Find some neighbour articles not in index
+            if ($php =~ /nyhet(.*)\.php/)
+            {
+                if (defined $next{$1})
+                {
+                    $php = "nyhet$next{$1}.php";
+                    unshift(@arkivnyhet, $php);
+                    $arkivnyhet{$php} = {
+                        'date' => $pubdate,
+                        'title' => $title,
+                        'num' => ++ $postnum,
+                    };
+                }
+            }
         }
         else
         {
@@ -213,6 +398,23 @@ INDEXLINE: while (my $line = <$index>)
             'num' => ++ $postnum,
         };
         $inrecord = 0;
+
+        # Find some neighbour articles not in index
+        if ($url =~ /nyhet(.*)\.php/)
+        {
+            if (defined $next{$1})
+            {
+                $url = "nyhet$next{$1}.php";
+                unshift(@indexnyhet, $url);
+                $indexnyhet{$url} = {
+                    'date' => $pubdate,
+                    'updated' => $upddate,
+                    'title' => $headline,
+                    'body' => '',
+                    'num' => ++ $postnum,
+                };
+            }
+        }
     }
 
     # TODO: This is very much like what we parse in parsearticle...
@@ -312,6 +514,7 @@ print "Done reading index.php\n\n";
 
 # Keep user-friendly URLs for all pages
 my %redirect;
+my %directre; # the opposite of above, to detect duplicates
 
 # Some redirects for pages just saying a page is gone; some of these do not
 # actually exist in the archive...
@@ -584,8 +787,12 @@ sub parsearticle
             }
         }
 
+
         # Locate text post body HTML; ignore the header end </center>
         # but possible parse an image if we find it
+
+        # Ignore bottom-of-page left and right navigation
+        next LINE if $line =~ m!<table width="100%" border="0"><tr><td align="left"><a href="http://www\.etterstad\.no/nyhet.*\.php">\.</a></td><td align="right"><a href="http://www\.etterstad\.no/nyhet.*\.php">\.</a></td></table>!;
         if (!$foundheaderend && $line =~ /<\/center>/)
         {
             $foundheaderend = 1;
@@ -666,14 +873,24 @@ sub xmlrecord
     $headlineurl =~ tr/æøå /aoa-/;
     $headlineurl =~ s/[^-a-z0-9_]//g;
     my $linkname = "http://etterstad.no/$ymdurl/$headlineurl";
+    if (defined $redirect{$id})
+    {
+        die "We have seen $id before, it is already redirected to $redirect{$id}\n";
+    }
 
     # Select a (rough) category for the post
     my $category = '';
     if ($id =~ /^nyhet/)
     {
         $category = 'nyhet';
-        die "Duplicate redirect $id" if defined $redirect{$id} && $redirect{$id} ne $linkname;
+        my $origlinkname = $linkname;
+        my $linkcounter = 1;
+        while (defined $directre{$linkname})
+        {
+            $linkname = $origlinkname . "-" . (++ $linkcounter);
+        }
         $redirect{$id} = $linkname;
+        $directre{$linkname} = $id;
     }
     elsif ($id =~ /^20/)
     {
@@ -683,7 +900,14 @@ sub xmlrecord
     {
         $category = 'info';
         die "Duplicate redirect $id" if defined $redirect{$id} && $redirect{$id} ne $linkname;
+        my $origlinkname = $linkname;
+        my $linkcounter = 1;
+        while (defined $directre{$linkname})
+        {
+            $linkname = $origlinkname . "-" . (++ $linkcounter);
+        }
         $redirect{$id} = $linkname;
+        $directre{$linkname} = $id;
     }
     die "No category from id=$id (pubdate=$pubdate headline=$headline)\n" if $category eq '';
     die "Undefined category $category" if !defined $categories{$category};
@@ -722,5 +946,10 @@ sub findredirect
 {
     my $origurl = shift;
     return $redirect{$origurl} if defined $redirect{$origurl};
+    $origurl =~ s/,php/.php/;
+    $origurl =~ s/691c/691/;
+    $origurl =~ s/i\.php/.php/;
+    return $redirect{$origurl} if defined $redirect{$origurl};
+    die "$origurl is not in link database\n";
     return $origurl;
 }
