@@ -30,13 +30,15 @@ print $out <<"EOM";
   <wp:author_login>etterstad</wp:author_login>
   <wp:author_email>post\@etterstad.no</wp:author_email>
   <wp:author_display_name>Etterstad.no</wp:author_display_name>
+  <wp:author_first_name>Etterstad.no</wp:author_first_name>
+  <wp:author_last_name></wp:author_last_name>
  </wp:author>
 EOM
 
 # Write categories
 my %categories = (
-    'nyhet' => 1,
-    'lenke' => 2,
+    'nyheter' => 1,
+    'pekere' => 2,
     'info' => 3,
 );
 my $catnum = 0;
@@ -132,7 +134,7 @@ ARCHIVELINE: while (my $line = <$arkiv>)
             # Add some bonus content
             if ($php eq 'nyhet014.php')
             {
-                foreach my $subpage (('b', 'c'))
+                foreach my $subpage (('c', 'b'))
                 {
                     unshift(@arkivnyhet, "nyhet014$subpage.php");
                     $arkivnyhet{"nyhet014$subpage.php"} = {
@@ -141,7 +143,7 @@ ARCHIVELINE: while (my $line = <$arkiv>)
                         'num' => ++ $postnum,
                     };
                 }
-                foreach my $subpage (('a', 'b', 'c', 'd', 'e'))
+                foreach my $subpage (('e', 'd', 'c', 'b', 'a'))
                 {
                     unshift(@arkivnyhet, "nyhet015$subpage.php");
                     $arkivnyhet{"nyhet015$subpage.php"} = {
@@ -154,7 +156,7 @@ ARCHIVELINE: while (my $line = <$arkiv>)
 
             if ($php eq 'nyhet016.php')
             {
-                foreach my $subpage (('b', 'c', 'd', 'h', 'e', 'f', 'g'))
+                foreach my $subpage (('g', 'f', 'e', 'h', 'd', 'c', 'b'))
                 {
                     unshift(@arkivnyhet, "nyhet016$subpage.php");
                     $arkivnyhet{"nyhet016$subpage.php"} = {
@@ -167,7 +169,7 @@ ARCHIVELINE: while (my $line = <$arkiv>)
 
             if ($php eq 'nyhet211.php')
             {
-                foreach my $subpage (('b', 'c', 'd', 'e', 'f', 'g', 'h'))
+                foreach my $subpage (('h', 'g', 'f', 'e', 'd', 'c', 'b'))
                 {
                     unshift(@arkivnyhet, "nyhet211$subpage.php");
                     $arkivnyhet{"nyhet211$subpage.php"} = {
@@ -180,7 +182,7 @@ ARCHIVELINE: while (my $line = <$arkiv>)
 
             if ($php eq 'nyhet212.php')
             {
-                foreach my $subpage (('b', 'c', 'd', 'e', 'f', 'g', 'h',  'i','j'))
+                foreach my $subpage (('j', 'i','h', 'g', 'f', 'e', 'd', 'c', 'b'))
                 {
                     unshift(@arkivnyhet, "nyhet212$subpage.php");
                     $arkivnyhet{"nyhet212$subpage.php"} = {
@@ -193,7 +195,7 @@ ARCHIVELINE: while (my $line = <$arkiv>)
 
             if ($php eq 'nyhet321.php')
             {
-                foreach my $subpage (('a', 'b', 'c'))
+                foreach my $subpage (('c', 'b', 'a'))
                 {
                     unshift(@arkivnyhet, "nyhet321$subpage.php");
                     $arkivnyhet{"nyhet321$subpage.php"} = {
@@ -206,7 +208,7 @@ ARCHIVELINE: while (my $line = <$arkiv>)
 
             if ($php eq 'nyhet329.php')
             {
-                foreach my $subpage (('a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'))
+                foreach my $subpage (('h', 'g', 'f', 'e', 'd', 'c', 'b', 'a'))
                 {
                     unshift(@arkivnyhet, "nyhet329$subpage.php");
                     $arkivnyhet{"nyhet329$subpage.php"} = {
@@ -219,7 +221,7 @@ ARCHIVELINE: while (my $line = <$arkiv>)
 
             if ($php eq 'nyhet404a.php')
             {
-                foreach my $subpage (('', 'b', 'c', 'd', 'e', 'f'))
+                foreach my $subpage (('f', 'e', 'd', 'c', 'b', ''))
                 {
                     unshift(@arkivnyhet, "nyhet404$subpage.php");
                     $arkivnyhet{"nyhet404$subpage.php"} = {
@@ -232,7 +234,7 @@ ARCHIVELINE: while (my $line = <$arkiv>)
 
             if ($php eq 'nyhet432a.php')
             {
-                foreach my $subpage (('b', 'c', 'd'))
+                foreach my $subpage (('d', 'c', 'b'))
                 {
                     unshift(@arkivnyhet, "nyhet432$subpage.php");
                     $arkivnyhet{"nyhet432$subpage.php"} = {
@@ -882,7 +884,8 @@ sub xmlrecord
     my $category = '';
     if ($id =~ /^nyhet/)
     {
-        $category = 'nyhet';
+        $category = 'nyheter';
+        # Create unique permalink
         my $origlinkname = $linkname;
         my $linkcounter = 1;
         while (defined $directre{$linkname})
@@ -891,15 +894,18 @@ sub xmlrecord
         }
         $redirect{$id} = $linkname;
         $directre{$linkname} = $id;
+        # Import regenerates the permalink from the headline, so update the headline too
+        $headline .= " ($linkcounter)" if $linkcounter > 1;
+        $headlineurl .= "-$linkcounter" if $linkcounter > 1;
     }
     elsif ($id =~ /^20/)
     {
-        $category = 'lenke';
+        $category = 'pekere';
     }
     elsif ($id =~ /php$/)
     {
         $category = 'info';
-        die "Duplicate redirect $id" if defined $redirect{$id} && $redirect{$id} ne $linkname;
+        # Create unique permalink
         my $origlinkname = $linkname;
         my $linkcounter = 1;
         while (defined $directre{$linkname})
@@ -908,6 +914,9 @@ sub xmlrecord
         }
         $redirect{$id} = $linkname;
         $directre{$linkname} = $id;
+        # Import regenerates the permalink from the headline, so update the headline too
+        $headline .= " ($linkcounter)" if $linkcounter > 1;
+        $headlineurl .= "-$linkcounter" if $linkcounter > 1;
     }
     die "No category from id=$id (pubdate=$pubdate headline=$headline)\n" if $category eq '';
     die "Undefined category $category" if !defined $categories{$category};
