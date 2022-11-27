@@ -650,6 +650,7 @@ sub parsearticle
     my $foundimage = 0;
     my $image = '';
     my $foundheaderend = 0;
+    my $foundtextheader = 0;
     my $body = '';
     my $line;
 
@@ -773,8 +774,9 @@ sub parsearticle
 
         # Locate possible post header image
         $foundimage = 1 if $line =~ /<!--Bilde -->/;
-        if (!$foundheaderend && $image eq '')
+        if (!$foundheaderend && !$foundtextheader && $image eq '')
         {
+            $foundtextheader = 1, next LINE if $line =~ /<!-- Tekst -->/;
             if ($line =~ /<img/)
             {
                 if ($line =~ /src="([^"]+)"/)
@@ -805,8 +807,13 @@ sub parsearticle
             }
             next LINE;
         }
+        if ($foundtextheader && $line =~ /<img/)
+        {
+            # nyhet016g.php is missing the </center> to end the header
+            $foundheaderend = 1;
+        }
         next LINE unless $foundheaderend;
-        next LINE if $line =~ /<!-- Tekst -->/;
+        $foundtextheader = 1, next LINE if $line =~ /<!-- Tekst -->/;
 
         # Everything else is the text body (end-of-body marker was handled above)
         $body .= $line;
