@@ -517,6 +517,7 @@ print "Done reading index.php\n\n";
 # Keep user-friendly URLs for all pages
 my %redirect;
 my %directre; # the opposite of above, to detect duplicates
+my %postname; # the dateless name must be unique, too
 
 # Some redirects for pages just saying a page is gone; some of these do not
 # actually exist in the archive...
@@ -895,12 +896,13 @@ sub xmlrecord
         # Create unique permalink
         my $origlinkname = $linkname;
         my $linkcounter = 1;
-        while (defined $directre{$linkname})
+        while (defined $directre{$linkname} || defined $postname{"$headlineurl-$linkcounter"})
         {
             $linkname = $origlinkname . "-" . (++ $linkcounter);
         }
         $redirect{$id} = $linkname;
         $directre{$linkname} = $id;
+        $postname{"$headlineurl-$linkcounter"} = 1;
         # Import regenerates the permalink from the headline, so update the headline too
         $headline .= " ($linkcounter)" if $linkcounter > 1;
         $headlineurl .= "-$linkcounter" if $linkcounter > 1;
@@ -915,12 +917,13 @@ sub xmlrecord
         # Create unique permalink
         my $origlinkname = $linkname;
         my $linkcounter = 1;
-        while (defined $directre{$linkname})
+        while (defined $directre{$linkname} || defined $postname{"$headlineurl-$linkcounter"})
         {
             $linkname = $origlinkname . "-" . (++ $linkcounter);
         }
         $redirect{$id} = $linkname;
         $directre{$linkname} = $id;
+        $postname{"$headlineurl-$linkcounter"} = 1;
         # Import regenerates the permalink from the headline, so update the headline too
         $headline .= " ($linkcounter)" if $linkcounter > 1;
         $headlineurl .= "-$linkcounter" if $linkcounter > 1;
