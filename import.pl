@@ -261,7 +261,7 @@ ARCHIVELINE: while (my $line = <$arkiv>)
                     unshift(@arkivnyhet, $php);
                     $arkivnyhet{$php} = {
                         'date' => $pubdate,
-                        'title' => $title,
+                        'title' => '',
                         'num' => ++ $postnum,
                     };
                 }
@@ -275,7 +275,7 @@ ARCHIVELINE: while (my $line = <$arkiv>)
                     unshift(@arkivnyhet, $php);
                     $arkivnyhet{$php} = {
                         'date' => $pubdate,
-                        'title' => $title,
+                        'title' => '',
                         'num' => ++ $postnum,
                     };
                 }
@@ -289,7 +289,7 @@ ARCHIVELINE: while (my $line = <$arkiv>)
                     unshift(@arkivnyhet, $php);
                     $arkivnyhet{$php} = {
                         'date' => $pubdate,
-                        'title' => $title,
+                        'title' => '',
                         'num' => ++ $postnum,
                     };
                 }
@@ -304,7 +304,7 @@ ARCHIVELINE: while (my $line = <$arkiv>)
                     unshift(@arkivnyhet, $php);
                     $arkivnyhet{$php} = {
                         'date' => $pubdate,
-                        'title' => $title,
+                        'title' => '',
                         'num' => ++ $postnum,
                     };
                 }
@@ -862,7 +862,7 @@ sub parsearticle
     };
 
     # If in-file headline is different from the index headline, we add it
-    if ($headline ne $origheadline)
+    if ($headline ne $origheadline && $origheadline ne '')
     {
         $body = "<h1>$origheadline</h1>\n" . $body;
     }
