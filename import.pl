@@ -549,7 +549,7 @@ ARCHIVEENTRY: foreach my $nyhet (@arkivnyhet)
     {
         # External article, just print what we have
         print "linking to $url\n";
-        $xml .= &xmlrecord($out, $num, $pubdate, $title, $pubdate, $pubdate, '', "&lt;a href=\"$url\"&gt;$title&lt;/a&gt;");
+        $xml .= &xmlrecord($out, $num, $pubdate, $title, $pubdate, $pubdate, '', "<a href=\"$url\">$title</a>");
     }
 }
 print "Done importing archived articles\n\n";
@@ -888,21 +888,23 @@ sub xmlrecord
         die "We have seen $id before, it is already redirected to $redirect{$id}\n";
     }
 
+    # Create unique permalink
+    my $origlinkname = $linkname;
+    my $linkcounter = 1;
+    while (defined $directre{$linkname} || defined $postname{"$headlineurl-$linkcounter"})
+    {
+        $linkname = $origlinkname . "-" . (++ $linkcounter);
+    }
+    $postname{"$headlineurl-$linkcounter"} = 1;
+
     # Select a (rough) category for the post
     my $category = '';
     if ($id =~ /^nyhet/)
     {
         $category = 'nyheter';
-        # Create unique permalink
-        my $origlinkname = $linkname;
-        my $linkcounter = 1;
-        while (defined $directre{$linkname} || defined $postname{"$headlineurl-$linkcounter"})
-        {
-            $linkname = $origlinkname . "-" . (++ $linkcounter);
-        }
+        # Store redirect link
         $redirect{$id} = $linkname;
         $directre{$linkname} = $id;
-        $postname{"$headlineurl-$linkcounter"} = 1;
         # Import regenerates the permalink from the headline, so update the headline too
         $headline .= " ($linkcounter)" if $linkcounter > 1;
         $headlineurl .= "-$linkcounter" if $linkcounter > 1;
@@ -914,16 +916,9 @@ sub xmlrecord
     elsif ($id =~ /php$/)
     {
         $category = 'info';
-        # Create unique permalink
-        my $origlinkname = $linkname;
-        my $linkcounter = 1;
-        while (defined $directre{$linkname} || defined $postname{"$headlineurl-$linkcounter"})
-        {
-            $linkname = $origlinkname . "-" . (++ $linkcounter);
-        }
+        # Store redirect link
         $redirect{$id} = $linkname;
         $directre{$linkname} = $id;
-        $postname{"$headlineurl-$linkcounter"} = 1;
         # Import regenerates the permalink from the headline, so update the headline too
         $headline .= " ($linkcounter)" if $linkcounter > 1;
         $headlineurl .= "-$linkcounter" if $linkcounter > 1;
