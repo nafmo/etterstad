@@ -888,23 +888,21 @@ sub xmlrecord
         die "We have seen $id before, it is already redirected to $redirect{$id}\n";
     }
 
-    # Create unique permalink
-    my $origlinkname = $linkname;
-    my $linkcounter = 1;
-    while (defined $directre{$linkname} || defined $postname{"$headlineurl-$linkcounter"})
-    {
-        $linkname = $origlinkname . "-" . (++ $linkcounter);
-    }
-    $postname{"$headlineurl-$linkcounter"} = 1;
-
     # Select a (rough) category for the post
     my $category = '';
     if ($id =~ /^nyhet/)
     {
         $category = 'nyheter';
-        # Store redirect link
+        # Create unique permalink
+        my $origlinkname = $linkname;
+        my $linkcounter = 1;
+        while (defined $directre{$linkname} || defined $postname{"$headlineurl-$linkcounter"})
+        {
+            $linkname = $origlinkname . "-" . (++ $linkcounter);
+        }
         $redirect{$id} = $linkname;
         $directre{$linkname} = $id;
+        $postname{"$headlineurl-$linkcounter"} = 1;
         # Import regenerates the permalink from the headline, so update the headline too
         $headline .= " ($linkcounter)" if $linkcounter > 1;
         $headlineurl .= "-$linkcounter" if $linkcounter > 1;
@@ -916,9 +914,16 @@ sub xmlrecord
     elsif ($id =~ /php$/)
     {
         $category = 'info';
-        # Store redirect link
+        # Create unique permalink
+        my $origlinkname = $linkname;
+        my $linkcounter = 1;
+        while (defined $directre{$linkname} || defined $postname{"$headlineurl-$linkcounter"})
+        {
+            $linkname = $origlinkname . "-" . (++ $linkcounter);
+        }
         $redirect{$id} = $linkname;
         $directre{$linkname} = $id;
+        $postname{"$headlineurl-$linkcounter"} = 1;
         # Import regenerates the permalink from the headline, so update the headline too
         $headline .= " ($linkcounter)" if $linkcounter > 1;
         $headlineurl .= "-$linkcounter" if $linkcounter > 1;
