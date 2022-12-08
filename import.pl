@@ -868,6 +868,9 @@ sub parsearticle
         $body = "<h1>$origheadline</h1>\n" . $body;
     }
 
+    # Rewrite image URLs to point to top
+    $body =~ s@<img src="([^/])@<img src="/$1@g;
+
     # Output an XML record for this post
     return &xmlrecord($out, $num, $nyhet, $headline, $pubdate, $upddate, $image, $body);
 }
