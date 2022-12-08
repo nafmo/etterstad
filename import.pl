@@ -598,11 +598,11 @@ open my $htaccess, '>:encoding(utf-8)', 'htaccess.txt'
     or die "Unable to write enytt.xml: $!";
 foreach my $old (sort(keys %redirect))
 {
-    print $htaccess qq'Redirect permanent "$old" "$redirect{$old}"\n';
+    print $htaccess qq'Redirect permanent "/$old" "$redirect{$old}"\n';
     # Old-format links
     my $oldformat = 'index.php?vis=' . $old;
     $oldformat =~ s/\.php$//g;
-    print $htaccess qq'Redirect permanent "$oldformat" "$redirect{$old}"\n';
+    print $htaccess qq'Redirect permanent "/$oldformat" "$redirect{$old}"\n';
 }
 close $htaccess;
 print "Done exporting article redirect map\n";
